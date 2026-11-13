@@ -4,20 +4,20 @@ namespace Database\Seeders;
 
 use App\Models\Author;
 use App\Models\Post;
-use Illuminate\Database\Seeder;
 use Illuminate\Database\Eloquent\Factories\Sequence;
+use Illuminate\Database\Seeder;
 
 class PostSeeder extends Seeder
 {
     /**
-     * Insert published posts, drafts, and one pinned post.
+     * Create published announcements, drafts,
+     * and the personalized pinned birthday post.
      */
     public function run(): void
     {
-        // Retrieve the five authors created by AuthorSeeder.
         $authors = Author::all();
 
-        // Create 40 published posts using existing authors.
+        // Forty published sample announcements.
         Post::factory()
             ->count(40)
             ->state(new Sequence(
@@ -27,7 +27,7 @@ class PostSeeder extends Seeder
             ))
             ->create();
 
-        // Create 10 unpublished draft posts.
+        // Ten unpublished drafts.
         Post::factory()
             ->draft()
             ->count(10)
@@ -38,33 +38,24 @@ class PostSeeder extends Seeder
             ))
             ->create();
 
-        // Find the personalized Kagawad.
+        // Retrieve the personalized Kagawad.
         $kagawad = Author::where(
             'email',
             'kagawad.dimatulac@bulletin.test'
         )->firstOrFail();
 
-        // Create the required personalized pinned post.
+        // Preserve the personalized birthday announcement.
         Post::create([
             'author_id' => $kagawad->id,
-            'title' => 'Purok Dimatulac Clean-up Drive',
+            'title' => 'Happy Birthday, Mica Dimatulac!',
             'category' => 'Events',
-
-            'body' => 'Residents of Purok Dimatulac are invited '
-                . 'to participate in our community clean-up drive. '
-                . 'Let us work together to keep our surroundings '
-                . 'clean, safe, and healthy.',
-
-            // This announcement is publicly visible.
+            'body' => 'The Purok Dimatulac community wishes '
+                . 'Kagawad Mica Dimatulac a happy birthday '
+                . 'on August 7, 2026. Thank you for your '
+                . 'dedication and service to our community.',
             'is_published' => true,
-
-            // Pinned posts appear before regular posts.
             'is_pinned' => true,
-
-            // Personalized birthday date.
             'published_at' => '2026-08-07 08:00:00',
-
-            // Initial number of views.
             'views' => 0,
         ]);
     }

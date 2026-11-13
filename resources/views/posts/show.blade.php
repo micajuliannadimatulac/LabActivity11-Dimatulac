@@ -87,7 +87,7 @@
 
                 @forelse ($post->tags as $tag)
 
-                    <a href="{{ route('posts.index', ['tag' => $tag->id]) }}"
+                    <a href="{{ route('posts.index', ['tag' => $tag->name]) }}"
                        class="rounded-full bg-[#f2f5e2]
                               px-3 py-1 text-sm font-medium
                               text-[#7a5534]

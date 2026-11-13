@@ -15,7 +15,7 @@
     </p>
 </div>
 
-{{-- Search and filters --}}
+{{-- Search and filtering form. --}}
 <form id="bulletin-filter-form"
       method="GET"
       action="{{ route('posts.index') }}"
@@ -23,7 +23,8 @@
              bg-white p-5 shadow-sm md:grid-cols-4">
 
     <div>
-        <label for="q" class="mb-2 block font-medium text-gray-700">
+        <label for="q"
+               class="mb-2 block font-medium text-gray-700">
             Search announcements
         </label>
 
@@ -75,9 +76,10 @@
 
             <option value="">All Tags</option>
 
+            {{-- Tag names are used in public filter URLs. --}}
             @foreach ($tags as $tag)
-                <option value="{{ $tag->id }}"
-                    @selected(request('tag') == $tag->id)>
+                <option value="{{ $tag->name }}"
+                    @selected(request('tag') === $tag->name)>
                     {{ $tag->name }}
                 </option>
             @endforeach
@@ -86,8 +88,9 @@
 
     <div class="flex items-end gap-2">
         <button type="submit"
-                class="rounded-lg bg-[#d5954e] px-5 py-2
-                       font-medium text-white hover:bg-[#bf7d36]">
+                class="rounded-lg bg-[#d5954e]
+                       px-5 py-2 font-medium text-white
+                       hover:bg-[#bf7d36]">
             Search
         </button>
 
@@ -99,13 +102,12 @@
     </div>
 </form>
 
-{{-- Announce loading and errors without moving the search field. --}}
 <p id="search-status"
    role="status"
    aria-live="polite"
    class="mb-3 text-sm text-[#7a5534]"></p>
 
-{{-- Only this section is replaced by JavaScript. --}}
+{{-- JavaScript updates this container without reloading. --}}
 <div id="bulletin-results">
 
     <p class="mb-5 text-sm text-gray-600">
@@ -120,6 +122,7 @@
     <div class="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
 
         @forelse ($posts as $post)
+
             <article class="flex flex-col rounded-xl bg-white
                             p-6 shadow-sm transition hover:shadow-lg">
 
@@ -130,8 +133,9 @@
                     </span>
 
                     @if ($post->is_pinned)
-                        <span class="rounded-full bg-yellow-100 px-3 py-1
-                                     text-xs font-semibold text-yellow-800">
+                        <span class="rounded-full bg-yellow-100
+                                     px-3 py-1 text-xs font-semibold
+                                     text-yellow-800">
                             📌 Pinned
                         </span>
                     @endif
@@ -144,32 +148,36 @@
                     </a>
                 </h2>
 
-                {{-- Author is eager loaded by PostController. --}}
                 <p class="mb-3 text-sm text-[#8a765e]">
                     Posted by
                     <a href="{{ route('authors.show', $post->author->id) }}"
-                    class="font-semibold text-[#7a5534] hover:underline">
+                       class="font-semibold text-[#7a5534]
+                              hover:underline">
                         {{ $post->author->name }}
                     </a>
                     ({{ $post->author->position }})
                 </p>
 
-                <p class="mb-4 flex-grow text-sm leading-6 text-gray-600">
+                <p class="mb-4 flex-grow text-sm leading-6
+                          text-gray-600">
                     {{ \Illuminate\Support\Str::limit($post->body, 130) }}
                 </p>
 
-                {{-- Display the post's related tags. --}}
+                {{-- Tags are clickable and use tag names. --}}
                 <div class="mb-4 flex flex-wrap gap-2">
                     @foreach ($post->tags as $tag)
-                        <span class="rounded-full bg-[#f2f5e2] px-3 py-1
-                                     text-xs font-medium text-[#7a5534]">
+                        <a href="{{ route('posts.index', ['tag' => $tag->name]) }}"
+                           class="rounded-full bg-[#f2f5e2]
+                                  px-3 py-1 text-xs font-medium
+                                  text-[#7a5534] hover:bg-[#e2e8ca]">
                             #{{ $tag->name }}
-                        </span>
+                        </a>
                     @endforeach
                 </div>
 
                 <div class="mb-4 flex flex-wrap justify-between
                             gap-2 text-xs text-gray-500">
+
                     <span>
                         {{ $post->published_at?->format('M d, Y') }}
                     </span>
@@ -186,8 +194,10 @@
             </article>
 
         @empty
+
             <div class="rounded-xl bg-white p-10 text-center
                         shadow-sm sm:col-span-2 lg:col-span-3">
+
                 <p class="text-lg font-semibold text-gray-700">
                     No posts match your search.
                 </p>
@@ -197,18 +207,16 @@
                     View all announcements
                 </a>
             </div>
-        @endforelse
 
+        @endforelse
     </div>
 
-    {{-- Pagination stays inside the refreshed results section. --}}
     <div class="mt-8">
         {{ $posts->links() }}
     </div>
-
 </div>
 
-{{-- Live search with debounce and no full-page reload. --}}
+{{-- Automatic search and filtering. --}}
 <script>
 document.addEventListener('DOMContentLoaded', function () {
     const form = document.getElementById('bulletin-filter-form');
@@ -220,69 +228,14 @@ document.addEventListener('DOMContentLoaded', function () {
 
     let debounceTimer;
     let activeRequest;
+    let requestNumber = 0;
 
-    // Fetch the matching posts while preserving the search field.
-    async function updateResults(url) {
-        // Cancel an older request when the user types again.
-        if (activeRequest) {
-            activeRequest.abort();
-        }
-
-        activeRequest = new AbortController();
-        const currentRequest = activeRequest;
-
-        status.textContent = 'Searching...';
-
-        try {
-            const response = await fetch(url, {
-                signal: currentRequest.signal,
-                headers: {
-                    'Accept': 'text/html',
-                    'X-Requested-With': 'XMLHttpRequest'
-                }
-            });
-
-            if (!response.ok) {
-                throw new Error('Search request failed.');
-            }
-
-            // Parse the returned page without executing its scripts.
-            const html = await response.text();
-            const documentResult = new DOMParser()
-                .parseFromString(html, 'text/html');
-
-            const newResults = documentResult
-                .getElementById('bulletin-results');
-
-            if (!newResults) {
-                throw new Error('Search results were not found.');
-            }
-
-            // Replace only the posts, counts, and pagination.
-            // The input remains untouched and keeps keyboard focus.
-            results.innerHTML = newResults.innerHTML;
-
-            // Update the URL so filters can be bookmarked.
-            window.history.replaceState({}, '', url);
-
-            status.textContent = '';
-
-        } catch (error) {
-            if (error.name !== 'AbortError') {
-                status.textContent =
-                    'Could not update results. Please try again.';
-                console.error(error);
-            }
-        }
-    }
-
-    // Build a URL from the current search and filter values.
+    // Build the URL using current search and filter values.
     function getFilterUrl() {
         const url = new URL(form.action, window.location.origin);
         const params = new URLSearchParams(new FormData(form));
 
-        // Remove empty filters for cleaner URLs.
-        for (const [key, value] of params.entries()) {
+        for (const [key, value] of [...params.entries()]) {
             if (!value.trim()) {
                 params.delete(key);
             }
@@ -293,11 +246,69 @@ document.addEventListener('DOMContentLoaded', function () {
         return url.toString();
     }
 
-    // Wait 300ms after the latest keystroke.
+    // Load updated results without reloading the page.
+    async function updateResults(url, updateHistory = true) {
+        if (activeRequest) {
+            activeRequest.abort();
+        }
+
+        const controller = new AbortController();
+        activeRequest = controller;
+        const currentNumber = ++requestNumber;
+
+        status.textContent = 'Searching...';
+
+        try {
+            const response = await fetch(url, {
+                signal: controller.signal,
+                headers: {
+                    'Accept': 'text/html',
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
+            });
+
+            if (!response.ok) {
+                throw new Error('Search request failed.');
+            }
+
+            const html = await response.text();
+            const parsed = new DOMParser()
+                .parseFromString(html, 'text/html');
+
+            const newResults = parsed
+                .getElementById('bulletin-results');
+
+            if (!newResults) {
+                throw new Error('Search results were not found.');
+            }
+
+            // Ignore outdated responses.
+            if (currentNumber !== requestNumber) {
+                return;
+            }
+
+            results.innerHTML = newResults.innerHTML;
+
+            if (updateHistory) {
+                window.history.replaceState({}, '', url);
+            }
+
+            status.textContent = '';
+
+        } catch (error) {
+            if (error.name !== 'AbortError'
+                && currentNumber === requestNumber) {
+                status.textContent =
+                    'Could not update results. Please try again.';
+                console.error(error);
+            }
+        }
+    }
+
+    // Update while typing, after a 300ms pause.
     search.addEventListener('input', function () {
         clearTimeout(debounceTimer);
 
-        // Cancel any outdated request immediately.
         if (activeRequest) {
             activeRequest.abort();
         }
@@ -307,7 +318,7 @@ document.addEventListener('DOMContentLoaded', function () {
         }, 300);
     });
 
-    // Category and tag filters also update automatically.
+    // Apply category and tag filters automatically.
     [category, tag].forEach(function (select) {
         select.addEventListener('change', function () {
             clearTimeout(debounceTimer);
@@ -315,14 +326,14 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     });
 
-    // Keep the Search button working without reloading.
+    // Keep Search working without a full reload.
     form.addEventListener('submit', function (event) {
         event.preventDefault();
         clearTimeout(debounceTimer);
         updateResults(getFilterUrl());
     });
 
-    // Handle pagination inside the results area.
+    // Handle pagination links.
     results.addEventListener('click', function (event) {
         const link = event.target.closest('a[href]');
 
@@ -331,12 +342,10 @@ document.addEventListener('DOMContentLoaded', function () {
         }
 
         const url = new URL(link.href, window.location.origin);
+        const formUrl = new URL(form.action, window.location.origin);
 
-        // Intercept only pagination links for this page.
-        if (
-            url.pathname === new URL(form.action).pathname &&
-            url.searchParams.has('page')
-        ) {
+        if (url.pathname === formUrl.pathname
+            && url.searchParams.has('page')) {
             event.preventDefault();
             clearTimeout(debounceTimer);
             updateResults(url.toString());
