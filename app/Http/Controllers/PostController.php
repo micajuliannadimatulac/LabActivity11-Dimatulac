@@ -9,24 +9,22 @@ use Illuminate\Http\Request;
 class PostController extends Controller
 {
     /**
-     * Display published bulletin announcements.
+     * Display the public bulletin listing.
      *
-     * Supports title search, category filtering,
-     * tag filtering, eager loading, comment counts,
-     * pinned-first sorting, and pagination.
+     * Includes eager loading, searching, filtering,
+     * comment counts, sorting, and pagination.
      */
     public function index(Request $request)
     {
-        // Begin with published announcements only.
-        // Eager load authors and tags to avoid N+1 queries.
-        // withCount adds a comments_count attribute
-        // without loading every comment record.
+        // Load authors and tags together with the posts.
+        // Count comments without loading all comment records.
         $query = Post::query()
             ->with(['author', 'tags'])
             ->withCount('comments')
             ->where('is_published', true);
 
-        // Search by announcement title.
+        // Search for partial matches in post titles.
+        // For example, "dim" can match "Dimatulac".
         if ($request->filled('q')) {
             $search = $request->input('q');
 
@@ -37,7 +35,7 @@ class PostController extends Controller
             );
         }
 
-        // Filter by the existing announcement category.
+        // Apply the selected category filter.
         if ($request->filled('category')) {
             $query->where(
                 'category',
@@ -45,37 +43,38 @@ class PostController extends Controller
             );
         }
 
-        // Filter posts using the many-to-many tags relationship.
-        // whereHas only returns posts with a matching tag.
+        // Filter by the many-to-many tags relationship.
         if ($request->filled('tag')) {
             $tagId = $request->input('tag');
 
-            $query->whereHas('tags', function ($tagQuery) use ($tagId) {
-                $tagQuery->where('tags.id', $tagId);
-            });
+            $query->whereHas(
+                'tags',
+                function ($tagQuery) use ($tagId) {
+                    $tagQuery->where('tags.id', $tagId);
+                }
+            );
         }
 
-        // Keep pinned posts first, followed by newest posts.
-        // Show 9 posts per page and preserve filter parameters.
+        // Pinned announcements first, then newest posts.
+        // Preserve search filters across pagination.
         $posts = $query
             ->orderByDesc('is_pinned')
             ->latest('published_at')
             ->paginate(9)
             ->withQueryString();
 
-        // Retrieve categories from published posts only.
+        // Retrieve the available published categories.
         $categories = Post::query()
             ->where('is_published', true)
             ->distinct()
             ->orderBy('category')
             ->pluck('category');
 
-        // Retrieve all available tags for the filter dropdown.
+        // Retrieve tags for the filter dropdown.
         $tags = Tag::query()
             ->orderBy('name')
             ->get();
 
-        // Send the listing and filter options to the view.
         return view('posts.index', compact(
             'posts',
             'categories',
@@ -84,26 +83,37 @@ class PostController extends Controller
     }
 
     /**
-     * Display one published bulletin announcement.
+     * Display one published announcement.
      *
-     * This method is preserved from Lab Activity 10.
-     * We will enhance it with eager loading in Step 15.
+     * Step 15 adds eager loading for the author,
+     * tags, comments, and each comment's user.
      */
     public function show($id)
     {
-        // Find the post or return a 404 error.
+        // Retrieve the requested post.
+        // An invalid ID automatically returns HTTP 404.
         $post = Post::findOrFail($id);
 
-        // Draft posts must remain inaccessible to visitors.
+        // Unpublished drafts are not publicly accessible.
         abort_unless($post->is_published, 404);
 
-        // Increase the announcement's view count.
-        $post->views++;
+        // Increment the view counter directly in SQL.
+        // This avoids overwriting other post attributes.
+        $post->increment('views');
 
-        // Save the updated view count.
-        $post->save();
+        // Eager load relationships to prevent N+1 queries.
+        // comments.user loads each comment's writer.
+        // Comments are ordered newest first.
+        $post->load([
+            'author',
+            'tags',
+            'comments' => function ($query) {
+                $query->latest();
+            },
+            'comments.user',
+        ]);
 
-        // Display the existing individual post page.
+        // Pass the complete post to the Blade page.
         return view('posts.show', compact('post'));
     }
 }
