@@ -147,9 +147,10 @@
                 {{-- Author is eager loaded by PostController. --}}
                 <p class="mb-3 text-sm text-[#8a765e]">
                     Posted by
-                    <span class="font-semibold">
+                    <a href="{{ route('authors.show', $post->author->id) }}"
+                    class="font-semibold text-[#7a5534] hover:underline">
                         {{ $post->author->name }}
-                    </span>
+                    </a>
                     ({{ $post->author->position }})
                 </p>
 
